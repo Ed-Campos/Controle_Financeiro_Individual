@@ -1204,6 +1204,9 @@ function CalendarioScreen({ data, mk }) {
   const atrasadas = allExpenses.filter((e) => expenseStatus(e) === "Atrasado").sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const pendentes = allExpenses.filter((e) => expenseStatus(e) === "Pendente").sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const pagas = t.expenses.filter((e) => expenseStatus(e) === "Pago").sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const totalAtrasadas = atrasadas.reduce((s, e) => s + Number(e.value || 0), 0);
+  const totalPendentes = pendentes.reduce((s, e) => s + Number(e.value || 0), 0);
+  const totalPagas = pagas.reduce((s, e) => s + Number(e.value || 0), 0);
   const venceEmBreve = pendentes.filter((e) => { const d = daysUntil(e.dueDate); return d !== null && d <= 3 && d >= 0; });
 
   const cats = categoryBreakdown(t.expenses);
@@ -1261,19 +1264,43 @@ function CalendarioScreen({ data, mk }) {
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold text-stone-700">Atrasadas</p><Badge tone="danger">{atrasadas.length}</Badge>
           </div>
-          {atrasadas.length ? <div className="space-y-2">{atrasadas.map((e) => <Row key={e.id} e={e} />)}</div> : <EmptyState icon={Check} text="Nenhuma conta atrasada." />}
+          {atrasadas.length ? (
+            <>
+              <div className="space-y-2">{atrasadas.map((e) => <Row key={e.id} e={e} />)}</div>
+              <div className="flex items-center justify-between pt-3 mt-1 border-t border-stone-200">
+                <span className="text-sm font-semibold text-stone-700">Total</span>
+                <span className="text-sm font-semibold text-rose-600">{fmtBRL(totalAtrasadas)}</span>
+              </div>
+            </>
+          ) : <EmptyState icon={Check} text="Nenhuma conta atrasada." />}
         </Card>
         <Card className="p-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold text-stone-700">Próximos vencimentos</p><Badge tone="warning">{pendentes.length}</Badge>
           </div>
-          {pendentes.length ? <div className="space-y-2">{pendentes.map((e) => <Row key={e.id} e={e} />)}</div> : <EmptyState icon={CalendarDays} text="Nenhuma conta pendente este mês." />}
+          {pendentes.length ? (
+            <>
+              <div className="space-y-2">{pendentes.map((e) => <Row key={e.id} e={e} />)}</div>
+              <div className="flex items-center justify-between pt-3 mt-1 border-t border-stone-200">
+                <span className="text-sm font-semibold text-stone-700">Total</span>
+                <span className="text-sm font-semibold text-amber-700">{fmtBRL(totalPendentes)}</span>
+              </div>
+            </>
+          ) : <EmptyState icon={CalendarDays} text="Nenhuma conta pendente este mês." />}
         </Card>
         <Card className="p-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold text-stone-700">Pagas em {labelForMonthKey(mk).toLowerCase()}</p><Badge tone="success">{pagas.length}</Badge>
           </div>
-          {pagas.length ? <div className="space-y-2">{pagas.map((e) => <Row key={e.id} e={e} />)}</div> : <EmptyState icon={Check} text="Nenhuma conta paga ainda este mês." />}
+          {pagas.length ? (
+            <>
+              <div className="space-y-2">{pagas.map((e) => <Row key={e.id} e={e} />)}</div>
+              <div className="flex items-center justify-between pt-3 mt-1 border-t border-stone-200">
+                <span className="text-sm font-semibold text-stone-700">Total</span>
+                <span className="text-sm font-semibold text-emerald-700">{fmtBRL(totalPagas)}</span>
+              </div>
+            </>
+          ) : <EmptyState icon={Check} text="Nenhuma conta paga ainda este mês." />}
         </Card>
       </div>
     </div>
