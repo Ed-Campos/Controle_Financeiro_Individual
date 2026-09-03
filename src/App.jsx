@@ -7,7 +7,7 @@ import {
   Home, Wallet, TrendingDown, Target, ShieldCheck, Sparkles, FileBarChart,
   Settings, Plus, Trash2, ChevronLeft, ChevronRight, LogOut, Copy, Check,
   AlertTriangle, TrendingUp, Users, ArrowRight, X, MoreHorizontal,
-  Calculator, CalendarDays, Bell, Download, Upload, Moon, Sun,
+  Calculator, CalendarDays, Bell, Download, Upload, Moon, Sun, Pencil,
 } from "lucide-react";
 import { storage, hasRealBackend } from "./lib/storage.js";
 
@@ -838,18 +838,41 @@ function DashboardScreen({ data, mk, setMk, session }) {
 
 /* ============================== RECEITAS ============================== */
 function ReceitasScreen({ data, mk, mutate, session }) {
-  const [form, setForm] = useState({ name: "", value: "", date: todayKey(), category: INCOME_CATEGORIES[0], frequency: "Mensal" });
+  const emptyForm = { name: "", value: "", date: todayKey(), category: INCOME_CATEGORIES[0], frequency: "Mensal" };
+  const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState(null);
   const t = monthlyTotals(data, mk);
   const byCategory = {};
   t.incomes.forEach((i) => { byCategory[i.category] = (byCategory[i.category] || 0) + monthlyEquivalent(i); });
 
-  function addIncome() {
+  function submitIncome() {
     if (!form.name.trim() || !form.value) return;
-    const record = { id: uid(), ...form, value: Number(form.value), responsible: session.name, createdBy: session.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    mutate((d) => ({ ...d, incomes: [...(d.incomes || []), record] }));
-    setForm({ ...form, name: "", value: "" });
+    if (editingId) {
+      mutate((d) => ({
+        ...d,
+        incomes: d.incomes.map((i) => i.id === editingId
+          ? { ...i, ...form, value: Number(form.value), updatedAt: new Date().toISOString() }
+          : i),
+      }));
+      setEditingId(null);
+    } else {
+      const record = { id: uid(), ...form, value: Number(form.value), responsible: session.name, createdBy: session.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      mutate((d) => ({ ...d, incomes: [...(d.incomes || []), record] }));
+    }
+    setForm(emptyForm);
   }
-  function removeIncome(id) { mutate((d) => ({ ...d, incomes: d.incomes.filter((i) => i.id !== id) })); }
+  function startEditIncome(i) {
+    setEditingId(i.id);
+    setForm({ name: i.name, value: String(i.value), date: i.date, category: i.category, frequency: i.frequency || "Mensal" });
+  }
+  function cancelEditIncome() {
+    setEditingId(null);
+    setForm(emptyForm);
+  }
+  function removeIncome(id) {
+    mutate((d) => ({ ...d, incomes: d.incomes.filter((i) => i.id !== id) }));
+    if (editingId === id) cancelEditIncome();
+  }
 
   return (
     <div className="space-y-5">
@@ -863,7 +886,7 @@ function ReceitasScreen({ data, mk, mutate, session }) {
       </div>
 
       <Card className="p-4">
-        <p className="text-sm font-semibold text-stone-700 mb-3">Adicionar receita</p>
+        <p className="text-sm font-semibold text-stone-700 mb-3">{editingId ? "Editar receita" : "Adicionar receita"}</p>
         <div className="grid md:grid-cols-3 gap-3">
           <Field label="Nome"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Salário" /></Field>
           <Field label="Valor (R$)"><input type="number" className={inputCls} value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} /></Field>
@@ -874,7 +897,14 @@ function ReceitasScreen({ data, mk, mutate, session }) {
             </select>
           </Field>
         </div>
-        <button onClick={addIncome} className="mt-3 flex items-center gap-1.5 bg-teal-900 hover:bg-teal-800 text-white text-sm font-medium px-4 py-2 rounded-lg"><Plus size={16} />Adicionar receita</button>
+        <div className="mt-3 flex items-center gap-2">
+          <button onClick={submitIncome} className="flex items-center gap-1.5 bg-teal-900 hover:bg-teal-800 text-white text-sm font-medium px-4 py-2 rounded-lg">
+            {editingId ? <Check size={16} /> : <Plus size={16} />}{editingId ? "Salvar alterações" : "Adicionar receita"}
+          </button>
+          {editingId && (
+            <button onClick={cancelEditIncome} className="text-sm font-medium text-stone-500 hover:text-stone-700 px-3 py-2">Cancelar</button>
+          )}
+        </div>
       </Card>
 
       <Card className="p-4">
@@ -888,6 +918,7 @@ function ReceitasScreen({ data, mk, mutate, session }) {
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-stone-700 font-medium whitespace-nowrap">{fmtBRL(i.value)}</span>
+                  <button onClick={() => startEditIncome(i)} className="text-stone-300 hover:text-teal-700"><Pencil size={15} /></button>
                   <button onClick={() => removeIncome(i.id)} className="text-stone-300 hover:text-rose-500"><Trash2 size={15} /></button>
                 </div>
               </div>
@@ -901,23 +932,46 @@ function ReceitasScreen({ data, mk, mutate, session }) {
 
 /* ============================== DESPESAS ============================== */
 function DespesasScreen({ data, mk, mutate, session }) {
-  const [form, setForm] = useState({ name: "", category: EXPENSE_CATEGORIES[0], value: "", dueDate: todayKey(), paidDate: "", type: "Variável" });
+  const emptyForm = { name: "", category: EXPENSE_CATEGORIES[0], value: "", dueDate: todayKey(), paidDate: "", type: "Variável" };
+  const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState(null);
   const [filterCat, setFilterCat] = useState("Todas");
   const t = monthlyTotals(data, mk);
   const filtered = filterCat === "Todas" ? t.expenses : t.expenses.filter((e) => e.category === filterCat);
   const totalPago = t.expenses.filter((e) => expenseStatus(e) === "Pago").reduce((s, e) => s + Number(e.value || 0), 0);
   const totalEmAberto = t.expenses.filter((e) => expenseStatus(e) !== "Pago").reduce((s, e) => s + Number(e.value || 0), 0);
 
-  function addExpense() {
+  function submitExpense() {
     if (!form.name.trim() || !form.value) return;
-    const record = { id: uid(), ...form, value: Number(form.value), responsible: session.name, createdBy: session.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    mutate((d) => ({ ...d, expenses: [...(d.expenses || []), record] }));
-    setForm({ ...form, name: "", value: "", paidDate: "" });
+    if (editingId) {
+      mutate((d) => ({
+        ...d,
+        expenses: d.expenses.map((e) => e.id === editingId
+          ? { ...e, ...form, value: Number(form.value), updatedAt: new Date().toISOString() }
+          : e),
+      }));
+      setEditingId(null);
+    } else {
+      const record = { id: uid(), ...form, value: Number(form.value), responsible: session.name, createdBy: session.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      mutate((d) => ({ ...d, expenses: [...(d.expenses || []), record] }));
+    }
+    setForm(emptyForm);
+  }
+  function startEditExpense(e) {
+    setEditingId(e.id);
+    setForm({ name: e.name, category: e.category, value: String(e.value), dueDate: e.dueDate, paidDate: e.paidDate || "", type: e.type });
+  }
+  function cancelEditExpense() {
+    setEditingId(null);
+    setForm(emptyForm);
   }
   function togglePaid(e) {
     mutate((d) => ({ ...d, expenses: d.expenses.map((x) => x.id === e.id ? { ...x, paidDate: x.paidDate ? "" : todayKey(), updatedAt: new Date().toISOString() } : x) }));
   }
-  function removeExpense(id) { mutate((d) => ({ ...d, expenses: d.expenses.filter((e) => e.id !== id) })); }
+  function removeExpense(id) {
+    mutate((d) => ({ ...d, expenses: d.expenses.filter((e) => e.id !== id) }));
+    if (editingId === id) cancelEditExpense();
+  }
 
   return (
     <div className="space-y-5">
@@ -930,7 +984,7 @@ function DespesasScreen({ data, mk, mutate, session }) {
       </div>
 
       <Card className="p-4">
-        <p className="text-sm font-semibold text-stone-700 mb-3">Adicionar despesa</p>
+        <p className="text-sm font-semibold text-stone-700 mb-3">{editingId ? "Editar despesa" : "Adicionar despesa"}</p>
         <div className="grid md:grid-cols-3 gap-3">
           <Field label="Nome"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Mercado" /></Field>
           <Field label="Valor (R$)"><input type="number" className={inputCls} value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} /></Field>
@@ -946,7 +1000,14 @@ function DespesasScreen({ data, mk, mutate, session }) {
             </select>
           </Field>
         </div>
-        <button onClick={addExpense} className="mt-3 flex items-center gap-1.5 bg-teal-900 hover:bg-teal-800 text-white text-sm font-medium px-4 py-2 rounded-lg"><Plus size={16} />Adicionar despesa</button>
+        <div className="mt-3 flex items-center gap-2">
+          <button onClick={submitExpense} className="flex items-center gap-1.5 bg-teal-900 hover:bg-teal-800 text-white text-sm font-medium px-4 py-2 rounded-lg">
+            {editingId ? <Check size={16} /> : <Plus size={16} />}{editingId ? "Salvar alterações" : "Adicionar despesa"}
+          </button>
+          {editingId && (
+            <button onClick={cancelEditExpense} className="text-sm font-medium text-stone-500 hover:text-stone-700 px-3 py-2">Cancelar</button>
+          )}
+        </div>
       </Card>
 
       <Card className="p-4">
@@ -972,6 +1033,7 @@ function DespesasScreen({ data, mk, mutate, session }) {
                   <div className="flex items-center gap-3 shrink-0 ml-auto">
                     <span className="text-stone-700 font-medium whitespace-nowrap">{fmtBRL(e.value)}</span>
                     <button onClick={() => togglePaid(e)}><Badge tone={st === "Pago" ? "success" : st === "Atrasado" ? "danger" : "warning"}>{st}</Badge></button>
+                    <button onClick={() => startEditExpense(e)} className="text-stone-300 hover:text-teal-700"><Pencil size={15} /></button>
                     <button onClick={() => removeExpense(e.id)} className="text-stone-300 hover:text-rose-500"><Trash2 size={15} /></button>
                   </div>
                 </div>
