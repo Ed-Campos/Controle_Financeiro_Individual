@@ -719,10 +719,16 @@ function DashboardScreen({ data, mk, setMk, session }) {
     const mt = monthlyTotals(data, m);
     return { mes: labelForMonthKey(m).slice(0, 3), Receita: Math.round(mt.receita), Despesas: Math.round(mt.despesa), Economia: Math.round(mt.saldo) };
   });
-  const upcoming = (data.expenses || [])
-    .filter((e) => expenseStatus(e) !== "Pago")
-    .sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""))
-    .slice(0, 4);
+  const upcomingAll = (data.expenses || [])
+    .filter((e) => {
+      const st = expenseStatus(e);
+      if (st === "Atrasado") return true;
+      if (st === "Pendente") { const d = daysUntil(e.dueDate); return d !== null && d <= 10; }
+      return false;
+    })
+    .sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));
+  const upcoming = upcomingAll;
+  const totalUpcoming = upcomingAll.reduce((s, e) => s + Number(e.value || 0), 0);
   const insights = generateInsights(data, mk).slice(0, 2);
 
   return (
@@ -787,22 +793,28 @@ function DashboardScreen({ data, mk, setMk, session }) {
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="p-4">
-          <p className="text-sm font-semibold text-stone-700 mb-3">Próximos vencimentos</p>
+          <p className="text-sm font-semibold text-stone-700 mb-3">Próximos vencimentos (10 dias)</p>
           {upcoming.length ? (
-            <div className="space-y-2">
-              {upcoming.map((e) => (
-                <div key={e.id} className="flex items-center justify-between gap-3 text-sm">
-                  <div className="min-w-0">
-                    <p className="text-stone-700 font-medium truncate">{e.name}</p>
-                    <p className="text-xs text-stone-400">{e.dueDate}</p>
+            <>
+              <div className="space-y-2">
+                {upcoming.map((e) => (
+                  <div key={e.id} className="flex items-center justify-between gap-3 text-sm">
+                    <div className="min-w-0">
+                      <p className="text-stone-700 font-medium truncate">{e.name}</p>
+                      <p className="text-xs text-stone-400">{e.dueDate}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-stone-700 whitespace-nowrap">{fmtBRL(e.value)}</p>
+                      <Badge tone={expenseStatus(e) === "Atrasado" ? "danger" : "warning"}>{expenseStatus(e)}</Badge>
+                    </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-stone-700 whitespace-nowrap">{fmtBRL(e.value)}</p>
-                    <Badge tone={expenseStatus(e) === "Atrasado" ? "danger" : "warning"}>{expenseStatus(e)}</Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between pt-3 mt-2 border-t border-stone-200">
+                <span className="text-sm font-semibold text-stone-700">Total</span>
+                <span className="text-sm font-semibold text-amber-700">{fmtBRL(totalUpcoming)}</span>
+              </div>
+            </>
           ) : <EmptyState icon={Check} text="Nenhuma conta pendente. Tudo em dia!" />}
         </Card>
 
