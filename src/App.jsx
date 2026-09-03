@@ -907,7 +907,7 @@ function ReceitasScreen({ data, mk, mutate, session }) {
 
 /* ============================== DESPESAS ============================== */
 function DespesasScreen({ data, mk, mutate, session }) {
-  const [form, setForm] = useState({ name: "", category: EXPENSE_CATEGORIES[0], value: "", dueDate: todayKey(), paidDate: "", type: "Variável", responsible: session.name });
+  const [form, setForm] = useState({ name: "", category: EXPENSE_CATEGORIES[0], value: "", dueDate: todayKey(), paidDate: "", type: "Variável" });
   const [filterCat, setFilterCat] = useState("Todas");
   const t = monthlyTotals(data, mk);
   const filtered = filterCat === "Todas" ? t.expenses : t.expenses.filter((e) => e.category === filterCat);
@@ -916,7 +916,7 @@ function DespesasScreen({ data, mk, mutate, session }) {
 
   function addExpense() {
     if (!form.name.trim() || !form.value) return;
-    const record = { id: uid(), ...form, value: Number(form.value), createdBy: session.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const record = { id: uid(), ...form, value: Number(form.value), responsible: session.name, createdBy: session.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     mutate((d) => ({ ...d, expenses: [...(d.expenses || []), record] }));
     setForm({ ...form, name: "", value: "", paidDate: "" });
   }
@@ -951,11 +951,6 @@ function DespesasScreen({ data, mk, mutate, session }) {
               <option>Fixa</option><option>Variável</option>
             </select>
           </Field>
-          <Field label="Responsável">
-            <select className={inputCls} value={form.responsible} onChange={(e) => setForm({ ...form, responsible: e.target.value })}>
-              {data.members.map((m) => <option key={m.name}>{m.name}</option>)}
-            </select>
-          </Field>
         </div>
         <button onClick={addExpense} className="mt-3 flex items-center gap-1.5 bg-teal-900 hover:bg-teal-800 text-white text-sm font-medium px-4 py-2 rounded-lg"><Plus size={16} />Adicionar despesa</button>
       </Card>
@@ -977,7 +972,7 @@ function DespesasScreen({ data, mk, mutate, session }) {
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: CAT_COLORS[e.category] }} />
                     <div className="min-w-0">
                       <p className="font-medium text-stone-700 truncate">{e.name} <span className="text-stone-400 font-normal">· {e.category}</span></p>
-                      <p className="text-xs text-stone-400 truncate">{e.responsible} · {e.type} · vence {e.dueDate}</p>
+                      <p className="text-xs text-stone-400 truncate">{e.type} · vence {e.dueDate}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0 ml-auto">
@@ -1423,7 +1418,7 @@ function CalendarioScreen({ data, mk }) {
           <div className="min-w-0">
             <p className="font-medium text-stone-700 truncate">{e.name} <span className="text-stone-400 font-normal">· {e.category}</span></p>
             <p className="text-xs text-stone-400">
-              {e.dueDate} · {e.responsible}
+              {e.dueDate}
               {st !== "Pago" && d !== null && (d < 0 ? ` · ${Math.abs(d)}d atrasada` : d === 0 ? " · vence hoje" : ` · vence em ${d}d`)}
             </p>
           </div>
@@ -1641,18 +1636,6 @@ function ConfigScreen({ data, code, session, mutate, onLogout, theme, onToggleTh
         <div className="flex gap-2">
           <input data-testid="household-name-input" className={inputCls} value={householdName} onChange={(e) => setHouseholdName(e.target.value)} />
           <button data-testid="save-household-name-button" onClick={saveName} className="bg-teal-900 hover:bg-teal-800 text-white text-sm font-medium px-4 rounded-lg shrink-0">Salvar</button>
-        </div>
-      </Card>
-
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-3"><Users size={17} className="text-stone-500" /><p className="text-sm font-semibold text-stone-700">Integrantes</p></div>
-        <div className="space-y-1.5">
-          {data.members.map((m) => (
-            <div key={m.name} className="flex items-center justify-between text-sm">
-              <span className="text-stone-600">{m.name}</span>
-              {m.name === session.name && <Badge>Você</Badge>}
-            </div>
-          ))}
         </div>
       </Card>
 
