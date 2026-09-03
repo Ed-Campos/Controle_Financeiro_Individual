@@ -83,13 +83,13 @@ function generateInsights(data, mk) {
   const comprometimento = cur.receita > 0 ? (cur.despesa / cur.receita) * 100 : 0;
 
   if (cur.receita === 0) {
-    insights.push({ type: "tip", text: "Cadastrem as receitas do casal para que a análise financeira comece a funcionar." });
+    insights.push({ type: "tip", text: "Cadastre suas receitas para que a análise financeira comece a funcionar." });
   } else if (comprometimento >= 80) {
-    insights.push({ type: "alert", text: `Vocês estão comprometendo ${comprometimento.toFixed(0)}% da renda este mês. O ideal é manter abaixo de 70% para ter folga no orçamento.` });
+    insights.push({ type: "alert", text: `Você está comprometendo ${comprometimento.toFixed(0)}% da sua renda este mês. O ideal é manter abaixo de 70% para ter folga no orçamento.` });
   } else if (comprometimento <= 50) {
-    insights.push({ type: "success", text: `Ótimo controle! Vocês estão comprometendo apenas ${comprometimento.toFixed(0)}% da renda este mês.` });
+    insights.push({ type: "success", text: `Ótimo controle! Você está comprometendo apenas ${comprometimento.toFixed(0)}% da sua renda este mês.` });
   } else {
-    insights.push({ type: "tip", text: `Vocês comprometem ${comprometimento.toFixed(0)}% da renda este mês — dentro de uma faixa razoável, mas dá para melhorar.` });
+    insights.push({ type: "tip", text: `Você compromete ${comprometimento.toFixed(0)}% da sua renda este mês — dentro de uma faixa razoável, mas dá para melhorar.` });
   }
 
   const curCat = categoryBreakdown(cur.expenses);
@@ -108,14 +108,14 @@ function generateInsights(data, mk) {
   const discretionaryTotal = curCat.filter((c) => discretionary.includes(c.name)).reduce((s, c) => s + c.value, 0);
   if (discretionaryTotal > 0) {
     const potencial = discretionaryTotal * 0.2;
-    insights.push({ type: "tip", text: `Reduzindo 20% em lazer, assinaturas e compras, vocês podem economizar ${fmtBRL(potencial)} por mês.` });
+    insights.push({ type: "tip", text: `Reduzindo 20% em lazer, assinaturas e compras, você pode economizar ${fmtBRL(potencial)} por mês.` });
   }
 
   const ef = data.emergencyFund || {};
   if (ef.target > 0) {
     const pct = Math.min(100, ((ef.currentSaved || 0) / ef.target) * 100);
-    if (pct >= 100) insights.push({ type: "success", text: "A reserva de emergência do casal está completa. Parabéns pela disciplina!" });
-    else if (pct < 30) insights.push({ type: "alert", text: `A reserva de emergência está em apenas ${pct.toFixed(0)}% da meta. Priorizar esse fundo traz mais segurança para o casal.` });
+    if (pct >= 100) insights.push({ type: "success", text: "Sua reserva de emergência está completa. Parabéns pela disciplina!" });
+    else if (pct < 30) insights.push({ type: "alert", text: `A reserva de emergência está em apenas ${pct.toFixed(0)}% da meta. Priorizar esse fundo traz mais segurança para você.` });
   }
 
   (data.goals || []).forEach((g) => {
@@ -167,7 +167,7 @@ async function loadHousehold(code) {
 }
 async function saveHousehold(code, data) {
   try { await storage.set(`household:${code}`, JSON.stringify(data), true); }
-  catch (e) { console.error("Erro ao salvar dados do casal:", e); }
+  catch (e) { console.error("Erro ao salvar dados:", e); }
 }
 async function loadSession() {
   try {
@@ -184,7 +184,7 @@ async function clearSession() {
 }
 
 /* ============================== BACKUP MANUAL ============================== */
-// Exporta/importa um arquivo .json com todos os dados do ambiente familiar.
+// Exporta/importa um arquivo .json com todos os dados da conta.
 // Serve tanto para levar os dados de um aparelho para outro (mesmo sem banco
 // de dados real configurado) quanto como cópia de segurança extra.
 function downloadBackup(code, data) {
@@ -215,7 +215,7 @@ function readBackupFile(file) {
           return;
         }
         const normalizedData = {
-          name: financialData.name || "Ambiente Familiar",
+          name: financialData.name || "Minhas Finanças",
           members: Array.isArray(financialData.members) && financialData.members.length > 0 ? financialData.members : [],
           incomes: Array.isArray(financialData.incomes) ? financialData.incomes : [],
           expenses: Array.isArray(financialData.expenses) ? financialData.expenses : [],
@@ -436,7 +436,7 @@ function LoginScreen({ onEnter, theme, onToggleTheme }) {
     setBusy(true);
     const code = `user-${cleanUser}`;
     const data = {
-      name: householdName.trim() || `Ambiente de ${username.trim()}`,
+      name: householdName.trim() || `Finanças de ${username.trim()}`,
       members: [{ name: username.trim() }],
       incomes: [],
       expenses: [],
@@ -531,7 +531,7 @@ function LoginScreen({ onEnter, theme, onToggleTheme }) {
             Controle e Gestão Financeira
           </h1>
           <p className="text-sm text-stone-500 mt-1 text-center">
-            O consultor financeiro do casal, sempre disponível.
+            O seu consultor financeiro, sempre disponível.
           </p>
         </div>
         <Card className="p-5">
@@ -570,13 +570,13 @@ function LoginScreen({ onEnter, theme, onToggleTheme }) {
               />
             </Field>
             {mode === "create" && (
-              <Field label="Nome do ambiente financeiro (opcional)">
+              <Field label="Nome do seu ambiente financeiro (opcional)">
                 <input
                   data-testid="auth-household-name-input"
                   className={inputCls}
                   value={householdName}
                   onChange={(e) => setHouseholdName(e.target.value)}
-                  placeholder="Ex: João & Maria"
+                  placeholder="Ex: Minhas Finanças"
                 />
               </Field>
             )}
@@ -838,14 +838,14 @@ function DashboardScreen({ data, mk, setMk, session }) {
 
 /* ============================== RECEITAS ============================== */
 function ReceitasScreen({ data, mk, mutate, session }) {
-  const [form, setForm] = useState({ name: "", value: "", date: todayKey(), category: INCOME_CATEGORIES[0], responsible: session.name, frequency: "Mensal" });
+  const [form, setForm] = useState({ name: "", value: "", date: todayKey(), category: INCOME_CATEGORIES[0], frequency: "Mensal" });
   const t = monthlyTotals(data, mk);
-  const byPerson = {};
-  t.incomes.forEach((i) => { byPerson[i.responsible] = (byPerson[i.responsible] || 0) + monthlyEquivalent(i); });
+  const byCategory = {};
+  t.incomes.forEach((i) => { byCategory[i.category] = (byCategory[i.category] || 0) + monthlyEquivalent(i); });
 
   function addIncome() {
     if (!form.name.trim() || !form.value) return;
-    const record = { id: uid(), ...form, value: Number(form.value), createdBy: session.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const record = { id: uid(), ...form, value: Number(form.value), responsible: session.name, createdBy: session.name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     mutate((d) => ({ ...d, incomes: [...(d.incomes || []), record] }));
     setForm({ ...form, name: "", value: "" });
   }
@@ -856,10 +856,10 @@ function ReceitasScreen({ data, mk, mutate, session }) {
       <h1 style={{ fontFamily: "Fraunces" }} className="text-2xl font-semibold text-stone-800">Receitas</h1>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        {Object.entries(byPerson).map(([person, val]) => (
-          <StatCard key={person} label={`Renda de ${person}`} value={fmtBRL(val)} sub={t.receita > 0 ? `${((val / t.receita) * 100).toFixed(0)}% da renda familiar` : ""} />
+        <StatCard label="Renda total do mês" value={fmtBRL(t.receita)} />
+        {Object.entries(byCategory).map(([cat, val]) => (
+          <StatCard key={cat} label={cat} value={fmtBRL(val)} sub={t.receita > 0 ? `${((val / t.receita) * 100).toFixed(0)}% da renda` : ""} />
         ))}
-        <StatCard label="Renda familiar total" value={fmtBRL(t.receita)} />
       </div>
 
       <Card className="p-4">
@@ -871,11 +871,6 @@ function ReceitasScreen({ data, mk, mutate, session }) {
           <Field label="Categoria">
             <select className={inputCls} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
               {INCOME_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-            </select>
-          </Field>
-          <Field label="Responsável">
-            <select className={inputCls} value={form.responsible} onChange={(e) => setForm({ ...form, responsible: e.target.value })}>
-              {data.members.map((m) => <option key={m.name}>{m.name}</option>)}
             </select>
           </Field>
           <Field label="Frequência">
@@ -895,7 +890,7 @@ function ReceitasScreen({ data, mk, mutate, session }) {
               <div key={i.id} className="flex items-center justify-between gap-3 text-sm border-b border-stone-100 pb-2 last:border-0">
                 <div className="min-w-0">
                   <p className="font-medium text-stone-700 truncate">{i.name} <span className="text-stone-400 font-normal">· {i.category}</span></p>
-                  <p className="text-xs text-stone-400 truncate">{i.responsible} · {i.frequency} · adicionado por {i.createdBy}</p>
+                  <p className="text-xs text-stone-400 truncate">{i.frequency}</p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-stone-700 font-medium whitespace-nowrap">{fmtBRL(i.value)}</span>
@@ -1027,7 +1022,7 @@ function MetasScreen({ data, mk, mutate, session }) {
           const feasible = necessario <= disponivel;
           return (
             <div className={`mt-3 text-sm rounded-lg px-3 py-2 ${feasible ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-              Para alcançar essa meta em {meses} {meses === 1 ? "mês" : "meses"}, vocês precisam guardar <b>{fmtBRL(necessario)}/mês</b>.
+              Para alcançar essa meta em {meses} {meses === 1 ? "mês" : "meses"}, você precisa guardar <b>{fmtBRL(necessario)}/mês</b>.
               {!feasible && ` O saldo disponível hoje é de ${fmtBRL(disponivel)} — considerem revisar gastos em lazer, assinaturas ou compras, ou ampliar o prazo.`}
             </div>
           );
@@ -1357,10 +1352,10 @@ function SimuladorScreen({ data, mk }) {
             <Field label="Valor mensal (R$)"><input type="number" className={inputCls} value={poup.valor} onChange={(e) => setPoup({ ...poup, valor: e.target.value })} /></Field>
             <Field label="Por quantos meses"><input type="number" className={inputCls} value={poup.meses} onChange={(e) => setPoup({ ...poup, meses: e.target.value })} /></Field>
           </div>
-          <ResultBanner tone="success">Economizando {fmtBRL(poup.valor)}/mês por {poup.meses || 0} meses, vocês terão <b>{fmtBRL(poupTotal)}</b> guardados (sem considerar rendimento de investimento).</ResultBanner>
+          <ResultBanner tone="success">Economizando {fmtBRL(poup.valor)}/mês por {poup.meses || 0} meses, você terá <b>{fmtBRL(poupTotal)}</b> guardados (sem considerar rendimento de investimento).</ResultBanner>
         </SimBlock>
 
-        <SimBlock title="Se a renda do casal aumentar...">
+        <SimBlock title="Se sua renda aumentar...">
           <Field label="Aumento de renda (R$/mês)"><input type="number" className={inputCls} value={renda.aumento} onChange={(e) => setRenda({ aumento: e.target.value })} /></Field>
           <ResultBanner tone="success">
             O saldo disponível passaria de {fmtBRL(t.saldo)} para <b>{fmtBRL(novoSaldo)}</b>, e a renda comprometida cairia para <b>{novoComprometimento.toFixed(0)}%</b>.
@@ -1385,7 +1380,7 @@ function SimuladorScreen({ data, mk }) {
             <Field label="Guardando por mês (R$)"><input type="number" className={inputCls} value={meta.mensal} onChange={(e) => setMeta({ ...meta, mensal: e.target.value })} /></Field>
           </div>
           <ResultBanner tone="success">
-            Guardando {fmtBRL(meta.mensal)}/mês, vocês alcançam {fmtBRL(meta.valor)} em <b>{mesesNecessarios} {mesesNecessarios === 1 ? "mês" : "meses"}</b> (aproximadamente {(mesesNecessarios / 12).toFixed(1)} anos).
+            Guardando {fmtBRL(meta.mensal)}/mês, você alcança {fmtBRL(meta.valor)} em <b>{mesesNecessarios} {mesesNecessarios === 1 ? "mês" : "meses"}</b> (aproximadamente {(mesesNecessarios / 12).toFixed(1)} anos).
           </ResultBanner>
         </SimBlock>
       </div>
@@ -1451,7 +1446,7 @@ function CalendarioScreen({ data, mk }) {
           {discretionaryAlerts.map((c) => (
             <div key={c.name} className="flex items-start gap-2 bg-amber-50 text-amber-700 text-sm rounded-lg px-3 py-2.5">
               <Bell size={16} className="shrink-0 mt-0.5" />
-              <span>Vocês estão próximos do limite saudável em {c.name}: já é {c.pct}% dos gastos do mês.</span>
+              <span>Você está próximo do limite saudável em {c.name}: já é {c.pct}% dos gastos do mês.</span>
             </div>
           ))}
         </div>
@@ -1519,7 +1514,7 @@ function AnaliseScreen({ data, mk }) {
     <div className="space-y-5">
       <div>
         <h1 style={{ fontFamily: "Fraunces" }} className="text-2xl font-semibold text-stone-800">Minha análise financeira</h1>
-        <p className="text-sm text-stone-500">Baseada nos dados de {labelForMonthKey(mk).toLowerCase()}, atualizada automaticamente conforme vocês registram receitas e despesas.</p>
+        <p className="text-sm text-stone-500">Baseada nos dados de {labelForMonthKey(mk).toLowerCase()}, atualizada automaticamente conforme você registra receitas e despesas.</p>
       </div>
       {sections.map((s) => groups[s.key].length > 0 && (
         <Card key={s.key} className="p-4">
@@ -1562,7 +1557,7 @@ function RelatoriosScreen({ data, mk }) {
         <p className="text-sm font-semibold text-stone-700 mb-3">Relatório mensal · {labelForMonthKey(mk)}</p>
         <div className="grid md:grid-cols-2 gap-4">
           <div>
-            <p className="text-xs text-stone-500 mb-2">Onde vocês mais gastaram</p>
+            <p className="text-xs text-stone-500 mb-2">Onde você mais gastou</p>
             {cats.length ? cats.slice(0, 5).map((c) => (
               <div key={c.name} className="mb-1.5">
                 <div className="flex justify-between text-xs text-stone-600 mb-0.5"><span>{c.name}</span><span>{fmtBRL(c.value)}</span></div>
@@ -1605,16 +1600,10 @@ function RelatoriosScreen({ data, mk }) {
 
 /* ============================== CONFIGURAÇÕES ============================== */
 function ConfigScreen({ data, code, session, mutate, onLogout, theme, onToggleTheme }) {
-  const [copied, setCopied] = useState(false);
   const [householdName, setHouseholdName] = useState(data.name);
   useEffect(() => { setHouseholdName(data.name); }, [data.name]);
   const [importMsg, setImportMsg] = useState(null); // { text, ok }
 
-  function copyCode() {
-    navigator.clipboard?.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }
   function saveName() { mutate((d) => ({ ...d, name: householdName })); }
   function handleExport() { downloadBackup(code, data); }
 
@@ -1640,15 +1629,10 @@ function ConfigScreen({ data, code, session, mutate, onLogout, theme, onToggleTh
       <div className="flex items-center justify-between gap-3"><h1 style={{ fontFamily: "Fraunces" }} className="text-2xl font-semibold text-stone-800">Ajustes</h1><button data-testid="authenticated-theme-toggle" onClick={onToggleTheme} aria-label="Alternar tema" className="flex items-center gap-2 text-sm text-stone-500 border border-stone-200 rounded-lg px-3 py-2">{theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}{theme === "dark" ? "Tema claro" : "Tema escuro"}</button></div>
 
       <Card className="p-4">
-        <p className="text-sm font-semibold text-stone-700 mb-3">Ambiente familiar</p>
-        <div className="flex gap-2 mb-3">
+        <p className="text-sm font-semibold text-stone-700 mb-3">Meu ambiente financeiro</p>
+        <div className="flex gap-2">
           <input data-testid="household-name-input" className={inputCls} value={householdName} onChange={(e) => setHouseholdName(e.target.value)} />
           <button data-testid="save-household-name-button" onClick={saveName} className="bg-teal-900 hover:bg-teal-800 text-white text-sm font-medium px-4 rounded-lg shrink-0">Salvar</button>
-        </div>
-        <p className="text-xs text-stone-500 mb-1">Código de acesso compartilhado — envie para seu parceiro(a) entrar no mesmo ambiente:</p>
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-lg tracking-widest bg-stone-100 px-3 py-1.5 rounded-lg text-stone-700">{code}</span>
-          <button onClick={copyCode} className="text-stone-400 hover:text-teal-800">{copied ? <Check size={17} /> : <Copy size={17} />}</button>
         </div>
       </Card>
 
@@ -1666,7 +1650,7 @@ function ConfigScreen({ data, code, session, mutate, onLogout, theme, onToggleTh
 
       <Card className="p-4">
         <p className="text-sm font-semibold text-stone-700 mb-1">Backup manual</p>
-        <p className="text-xs text-stone-500 mb-3">Baixe uma cópia de tudo que está cadastrado aqui — útil para levar os dados para outro aparelho, ou como segurança extra além da sincronização automática.</p>
+        <p className="text-xs text-stone-500 mb-3">Baixe uma cópia de tudo que está cadastrado aqui — útil para levar os dados para outro aparelho (faça login/cadastro lá e restaure o arquivo aqui nesta tela), ou como segurança extra.</p>
         <div className="flex flex-wrap gap-2">
           <button data-testid="download-backup-button" onClick={handleExport} className="flex items-center gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 text-sm font-medium px-4 py-2 rounded-lg"><Download size={15} />Baixar backup</button>
           <label className="flex items-center gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 text-sm font-medium px-4 py-2 rounded-lg cursor-pointer">
@@ -1678,12 +1662,12 @@ function ConfigScreen({ data, code, session, mutate, onLogout, theme, onToggleTh
       </Card>
 
       <Card className="p-4">
-        <p className="text-sm font-semibold text-stone-700 mb-2">Sobre a sincronização</p>
-        <p className="text-xs text-stone-500 leading-relaxed">Os dados deste ambiente ficam salvos com o código acima e são compartilhados entre todos que entrarem com ele — em tempo real, entre qualquer dispositivo. Guarde o código com cuidado: quem tiver acesso a ele acessa os dados financeiros do casal.</p>
+        <p className="text-sm font-semibold text-stone-700 mb-2">Sobre o armazenamento</p>
+        <p className="text-xs text-stone-500 leading-relaxed">Seus dados ficam salvos apenas neste navegador/aparelho, presos à sua conta. Fechar o app, atualizar a página ou sair não apaga nada. Para levar os dados para outro aparelho, use o backup manual acima.</p>
       </Card>
 
       <button data-testid="logout-button" onClick={onLogout} className="flex items-center gap-2 text-sm font-medium text-rose-600 hover:text-rose-700 px-1">
-        <LogOut size={16} /> Sair deste ambiente
+        <LogOut size={16} /> Sair
       </button>
     </div>
   );
