@@ -911,6 +911,8 @@ function DespesasScreen({ data, mk, mutate, session }) {
   const [filterCat, setFilterCat] = useState("Todas");
   const t = monthlyTotals(data, mk);
   const filtered = filterCat === "Todas" ? t.expenses : t.expenses.filter((e) => e.category === filterCat);
+  const totalPago = t.expenses.filter((e) => expenseStatus(e) === "Pago").reduce((s, e) => s + Number(e.value || 0), 0);
+  const totalEmAberto = t.expenses.filter((e) => expenseStatus(e) !== "Pago").reduce((s, e) => s + Number(e.value || 0), 0);
 
   function addExpense() {
     if (!form.name.trim() || !form.value) return;
@@ -926,6 +928,12 @@ function DespesasScreen({ data, mk, mutate, session }) {
   return (
     <div className="space-y-5">
       <h1 style={{ fontFamily: "Fraunces" }} className="text-2xl font-semibold text-stone-800">Despesas</h1>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <StatCard label={`Total de ${labelForMonthKey(mk).toLowerCase()}`} value={fmtBRL(t.despesa)} />
+        <StatCard label="Pago" value={fmtBRL(totalPago)} tone="success" />
+        <StatCard label="Em aberto" value={fmtBRL(totalEmAberto)} tone="danger" />
+      </div>
 
       <Card className="p-4">
         <p className="text-sm font-semibold text-stone-700 mb-3">Adicionar despesa</p>
