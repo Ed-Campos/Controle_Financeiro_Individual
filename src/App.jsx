@@ -1069,58 +1069,244 @@ function MetasScreen({ data, mk, mutate, session }) {
 }
 
 /* ============================== RESERVA DE EMERGÊNCIA ============================== */
+function addMonthsLabel(n) {
+  const d = new Date();
+  d.setMonth(d.getMonth() + n);
+  return `${MONTH_NAMES[d.getMonth()]}/${d.getFullYear()}`;
+}
+const WITHDRAW_REASONS = ["Emergência médica", "Manutenção do veículo", "Perda de renda", "Conta inesperada", "Outro"];
+const PRAZO_PRESETS = [3, 6, 12, 18, 24];
+
 function ReservaScreen({ data, mk, mutate }) {
-  const ef = data.emergencyFund || { avgMonthlyExpense: 0, monthsDesired: 6, currentSaved: 0, goalMonths: 12 };
+  const ef = data.emergencyFund || {};
+  const target = Number(ef.target || 0);
+  const currentSaved = Number(ef.currentSaved || 0);
+  const monthlyContribution = Number(ef.monthlyContribution || 0);
+  const history = ef.history || [];
+
   const t = monthlyTotals(data, mk);
-  const suggestedAvg = t.despesa || ef.avgMonthlyExpense;
-  const [form, setForm] = useState({ avgMonthlyExpense: ef.avgMonthlyExpense || suggestedAvg, monthsDesired: ef.monthsDesired || 6, goalMonths: ef.goalMonths || 12 });
+  const sobra = t.saldo;
+  const sugMin = sobra > 0 ? Math.max(0, Math.round((sobra * 0.4) / 10) * 10) : 0;
+  const sugMax = sobra > 0 ? Math.max(sugMin, Math.round((sobra * 0.6) / 10) * 10) : 0;
 
-  const target = Number(form.avgMonthlyExpense || 0) * Number(form.monthsDesired || 0);
-  const pct = target > 0 ? Math.min(100, ((ef.currentSaved || 0) / target) * 100) : 0;
-  const monthlyNeeded = target > 0 ? Math.max(0, (target - (ef.currentSaved || 0)) / Number(form.goalMonths || 1)) : 0;
+  const remaining = Math.max(0, target - currentSaved);
+  const pct = target > 0 ? Math.min(100, (currentSaved / target) * 100) : 0;
+  const monthsRemaining = monthlyContribution > 0 && remaining > 0 ? Math.ceil(remaining / monthlyContribution) : remaining <= 0 ? 0 : null;
+  const forecastLabel = monthsRemaining === null ? "defina um valor mensal para calcular" : monthsRemaining === 0 ? "meta já atingida" : addMonthsLabel(monthsRemaining);
 
-  function saveSettings() {
-    mutate((d) => ({ ...d, emergencyFund: { ...ef, avgMonthlyExpense: Number(form.avgMonthlyExpense), monthsDesired: Number(form.monthsDesired), goalMonths: Number(form.goalMonths), target } }));
+  // Formulário de meta/valor mensal (local até perder o foco, aí salva)
+  const [targetInput, setTargetInput] = useState(target ? String(target) : "");
+  const [monthlyInput, setMonthlyInput] = useState(monthlyContribution ? String(monthlyContribution) : "");
+  const [customPrazo, setCustomPrazo] = useState("");
+  useEffect(() => { setTargetInput(target ? String(target) : ""); }, [target]);
+  useEffect(() => { setMonthlyInput(monthlyContribution ? String(monthlyContribution) : ""); }, [monthlyContribution]);
+
+  function commitTarget() {
+    const v = Math.max(0, Number(targetInput) || 0);
+    mutate((d) => ({ ...d, emergencyFund: { ...(d.emergencyFund || {}), target: v } }));
   }
-  function addContribution(v) {
-    mutate((d) => ({ ...d, emergencyFund: { ...(d.emergencyFund || ef), currentSaved: Math.max(0, (d.emergencyFund?.currentSaved || 0) + v), target } }));
+  function commitMonthly() {
+    const v = Math.max(0, Number(monthlyInput) || 0);
+    mutate((d) => ({ ...d, emergencyFund: { ...(d.emergencyFund || {}), monthlyContribution: v } }));
+  }
+  function applyPrazo(meses) {
+    const val = remaining > 0 ? Math.ceil(remaining / meses) : 0;
+    setMonthlyInput(String(val));
+    mutate((d) => ({ ...d, emergencyFund: { ...(d.emergencyFund || {}), monthlyContribution: val } }));
+  }
+  function applySuggested() {
+    const val = sugMax || sugMin;
+    setMonthlyInput(String(val));
+    mutate((d) => ({ ...d, emergencyFund: { ...(d.emergencyFund || {}), monthlyContribution: val } }));
+  }
+
+  // Adicionar / retirar dinheiro
+  const [showAdd, setShowAdd] = useState(false);
+  const [showWithdraw, setShowWithdraw] = useState(false);
+  const [addForm, setAddForm] = useState({ value: "", date: todayKey(), note: "" });
+  const [withdrawForm, setWithdrawForm] = useState({ value: "", reason: WITHDRAW_REASONS[0], date: todayKey() });
+  const [lastAction, setLastAction] = useState(null); // "deposito" | "retirada" | null
+
+  function saveMovement(type, value, date, note) {
+    const v = Math.abs(Number(value) || 0);
+    if (v <= 0) return;
+    mutate((d) => {
+      const cur = d.emergencyFund || {};
+      const newSaved = type === "deposito" ? (cur.currentSaved || 0) + v : Math.max(0, (cur.currentSaved || 0) - v);
+      const entry = { id: uid(), type, value: v, date: date || todayKey(), note: note || "" };
+      return { ...d, emergencyFund: { ...cur, currentSaved: newSaved, history: [entry, ...(cur.history || [])] } };
+    });
+    setLastAction(type);
+  }
+  function handleAdd() {
+    saveMovement("deposito", addForm.value, addForm.date, addForm.note);
+    setAddForm({ value: "", date: todayKey(), note: "" });
+    setShowAdd(false);
+  }
+  function handleWithdraw() {
+    saveMovement("retirada", withdrawForm.value, withdrawForm.date, withdrawForm.reason);
+    setWithdrawForm({ value: "", reason: WITHDRAW_REASONS[0], date: todayKey() });
+    setShowWithdraw(false);
+  }
+
+  // Alerta inteligente
+  let alert = null;
+  if (target > 0) {
+    if (pct >= 100) alert = { tone: "success", text: "Parabéns! Você completou sua reserva de emergência." };
+    else if (lastAction === "retirada") alert = { tone: "alert", text: "Atenção: sua reserva diminuiu. Considere aumentar os próximos aportes." };
+    else if (pct >= 80) alert = { tone: "tip", text: `Você está quase lá! Faltam ${fmtBRL(remaining)} para completar sua reserva.` };
+    else if (currentSaved > 0) alert = { tone: "success", text: "Parabéns! Você está no caminho para completar sua reserva." };
   }
 
   return (
     <div className="space-y-5">
       <h1 style={{ fontFamily: "Fraunces" }} className="text-2xl font-semibold text-stone-800">Reserva de emergência</h1>
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        <Card className="p-4">
-          <p className="text-sm font-semibold text-stone-700 mb-3">Configurar meta</p>
-          <div className="space-y-3">
-            <Field label="Gasto médio mensal do casal (R$)">
-              <input type="number" className={inputCls} value={form.avgMonthlyExpense} onChange={(e) => setForm({ ...form, avgMonthlyExpense: e.target.value })} />
+      {/* Minha evolução — primeiro e maior destaque da tela */}
+      <Card className="p-5">
+        <p className="text-sm font-semibold text-stone-700 mb-4">Minha evolução</p>
+        <div className="grid grid-cols-3 gap-3 text-center mb-4">
+          <div>
+            <p className="text-xs text-stone-400 mb-1">Já guardado</p>
+            <p className="text-lg sm:text-2xl font-semibold text-teal-800">{fmtBRL(currentSaved)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-stone-400 mb-1">Falta</p>
+            <p className="text-lg sm:text-2xl font-semibold text-stone-700">{fmtBRL(remaining)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-stone-400 mb-1">Previsão</p>
+            <p className="text-lg sm:text-2xl font-semibold text-stone-700">{forecastLabel}</p>
+          </div>
+        </div>
+        <ProgressBar pct={pct} />
+        <div className="flex items-center justify-between mt-2">
+          <p className="text-xs text-stone-400">Meta: <b className="text-stone-600">{fmtBRL(target)}</b></p>
+          <p className="text-xs text-stone-400">{pct.toFixed(0)}%</p>
+        </div>
+        {alert && <ResultBanner tone={alert.tone}>{alert.text}</ResultBanner>}
+        <div className="flex gap-2 mt-4">
+          <button onClick={() => { setShowAdd((s) => !s); setShowWithdraw(false); }}
+            className="flex-1 flex items-center justify-center gap-1.5 bg-teal-900 hover:bg-teal-800 text-white text-sm font-medium py-2.5 rounded-lg">
+            <Plus size={16} /> Adicionar dinheiro
+          </button>
+          <button onClick={() => { setShowWithdraw((s) => !s); setShowAdd(false); }}
+            className="flex-1 flex items-center justify-center gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 text-sm font-medium py-2.5 rounded-lg">
+            <TrendingDown size={16} /> Retirar dinheiro
+          </button>
+        </div>
+
+        {showAdd && (
+          <div className="mt-4 pt-4 border-t border-stone-200 space-y-3">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Field label="Valor (R$)">
+                <input type="number" className={inputCls} value={addForm.value} onChange={(e) => setAddForm({ ...addForm, value: e.target.value })} placeholder="Ex: 500" />
+              </Field>
+              <Field label="Data">
+                <input type="date" className={inputCls} value={addForm.date} onChange={(e) => setAddForm({ ...addForm, date: e.target.value })} />
+              </Field>
+            </div>
+            <Field label="Observação (opcional)">
+              <input className={inputCls} value={addForm.note} onChange={(e) => setAddForm({ ...addForm, note: e.target.value })} placeholder="Ex: Aporte mensal" />
             </Field>
-            <Field label="Meses de segurança desejados">
-              <select className={inputCls} value={form.monthsDesired} onChange={(e) => setForm({ ...form, monthsDesired: e.target.value })}>
-                <option value={3}>3 meses</option><option value={6}>6 meses</option><option value={12}>12 meses</option>
+            <button onClick={handleAdd} className="bg-teal-900 hover:bg-teal-800 text-white text-sm font-medium px-4 py-2 rounded-lg">Salvar depósito</button>
+          </div>
+        )}
+        {showWithdraw && (
+          <div className="mt-4 pt-4 border-t border-stone-200 space-y-3">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Field label="Valor retirado (R$)">
+                <input type="number" className={inputCls} value={withdrawForm.value} onChange={(e) => setWithdrawForm({ ...withdrawForm, value: e.target.value })} placeholder="Ex: 300" />
+              </Field>
+              <Field label="Data">
+                <input type="date" className={inputCls} value={withdrawForm.date} onChange={(e) => setWithdrawForm({ ...withdrawForm, date: e.target.value })} />
+              </Field>
+            </div>
+            <Field label="Motivo da retirada">
+              <select className={inputCls} value={withdrawForm.reason} onChange={(e) => setWithdrawForm({ ...withdrawForm, reason: e.target.value })}>
+                {WITHDRAW_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
             </Field>
-            <Field label="Prazo desejado para completar (meses)">
-              <input type="number" className={inputCls} value={form.goalMonths} onChange={(e) => setForm({ ...form, goalMonths: e.target.value })} />
-            </Field>
-            <button onClick={saveSettings} className="bg-teal-900 hover:bg-teal-800 text-white text-sm font-medium px-4 py-2 rounded-lg">Salvar meta</button>
+            <button onClick={handleWithdraw} className="bg-rose-600 hover:bg-rose-700 text-white text-sm font-medium px-4 py-2 rounded-lg">Confirmar retirada</button>
           </div>
-        </Card>
+        )}
+      </Card>
 
-        <Card className="p-4 flex flex-col items-center justify-center text-center">
-          <ProgressRing pct={pct} size={120} stroke={11} color="#0f6b63" />
-          <p className="text-sm text-stone-500 mt-3">Meta: <b className="text-stone-700">{fmtBRL(target)}</b></p>
-          <p className="text-sm text-stone-500">Guardado: <b className="text-stone-700">{fmtBRL(ef.currentSaved || 0)}</b></p>
-          <p className="text-xs text-stone-400 mt-1">Guardando {fmtBRL(monthlyNeeded)}/mês, vocês completam em {form.goalMonths} meses.</p>
-          <div className="flex gap-2 mt-3">
-            <button onClick={() => addContribution(100)} className="text-xs bg-stone-100 hover:bg-stone-200 text-stone-600 px-3 py-1.5 rounded-md">+R$100</button>
-            <button onClick={() => addContribution(500)} className="text-xs bg-stone-100 hover:bg-stone-200 text-stone-600 px-3 py-1.5 rounded-md">+R$500</button>
-            <button onClick={() => addContribution(-100)} className="text-xs bg-stone-100 hover:bg-stone-200 text-stone-600 px-3 py-1.5 rounded-md">-R$100</button>
+      {/* Análise financeira automática */}
+      <Card className="p-4">
+        <p className="text-sm font-semibold text-stone-700 mb-3">Quanto você pode guardar por mês</p>
+        <div className="grid grid-cols-3 gap-2 text-center mb-3">
+          <div><p className="text-xs text-stone-400">Receita</p><p className="text-sm font-semibold text-stone-700">{fmtBRL(t.receita)}</p></div>
+          <div><p className="text-xs text-stone-400">Despesas</p><p className="text-sm font-semibold text-stone-700">{fmtBRL(t.despesa)}</p></div>
+          <div><p className="text-xs text-stone-400">Sobra</p><p className={`text-sm font-semibold ${sobra >= 0 ? "text-emerald-700" : "text-rose-600"}`}>{fmtBRL(sobra)}</p></div>
+        </div>
+        {sobra > 0 ? (
+          <ResultBanner tone="tip">
+            Com base na sua situação financeira, recomendamos guardar entre <b>{fmtBRL(sugMin)}</b> e <b>{fmtBRL(sugMax)}</b> por mês para sua reserva de emergência.
+            {" "}<button onClick={applySuggested} className="underline font-medium">Usar sugestão</button>
+          </ResultBanner>
+        ) : (
+          <ResultBanner tone="alert">Suas despesas estão iguais ou maiores que a receita este mês, então não há sobra para sugerir um valor de reserva agora. Isso é só uma recomendação — ajuste como preferir abaixo.</ResultBanner>
+        )}
+      </Card>
+
+      {/* Meta e prazo */}
+      <Card className="p-4">
+        <p className="text-sm font-semibold text-stone-700 mb-3">Meta e prazo</p>
+        <div className="space-y-3">
+          <Field label="Qual é a sua meta de reserva? (R$)">
+            <input type="number" className={inputCls} value={targetInput} onChange={(e) => setTargetInput(e.target.value)} onBlur={commitTarget} placeholder="Ex: 12000" />
+          </Field>
+          <div>
+            <span className="text-xs font-medium text-stone-500 mb-1.5 block">Em quanto tempo você quer construir essa reserva?</span>
+            <div className="flex flex-wrap gap-2">
+              {PRAZO_PRESETS.map((p) => (
+                <button key={p} onClick={() => applyPrazo(p)}
+                  className="text-xs font-medium bg-stone-100 hover:bg-teal-50 hover:text-teal-800 text-stone-600 px-3 py-1.5 rounded-full transition-colors">
+                  {p} meses
+                </button>
+              ))}
+              <div className="flex items-center gap-1.5">
+                <input type="number" className="w-20 rounded-full border border-stone-200 px-3 py-1.5 text-xs text-stone-800 focus:outline-none focus:ring-2 focus:ring-teal-700/30" placeholder="Outro" value={customPrazo} onChange={(e) => setCustomPrazo(e.target.value)} />
+                <button onClick={() => customPrazo && applyPrazo(Number(customPrazo))}
+                  className="text-xs font-medium bg-stone-100 hover:bg-teal-50 hover:text-teal-800 text-stone-600 px-3 py-1.5 rounded-full transition-colors">Aplicar</button>
+              </div>
+            </div>
           </div>
-        </Card>
-      </div>
+          <Field label="Quanto você deseja guardar por mês? (R$)">
+            <input type="number" className={inputCls} value={monthlyInput} onChange={(e) => setMonthlyInput(e.target.value)} onBlur={commitMonthly} placeholder="Ex: 1000" />
+          </Field>
+          {monthlyContribution > 0 && target > 0 && (
+            <p className="text-xs text-stone-500">
+              {monthsRemaining === 0
+                ? "Você já atingiu sua meta de reserva."
+                : `Guardando ${fmtBRL(monthlyContribution)} por mês, você terá ${fmtBRL(target)} em ${monthsRemaining} ${monthsRemaining === 1 ? "mês" : "meses"} (${forecastLabel}).`}
+            </p>
+          )}
+        </div>
+      </Card>
+
+      {/* Histórico */}
+      <Card className="p-4">
+        <p className="text-sm font-semibold text-stone-700 mb-3">Histórico de movimentações</p>
+        {history.length ? (
+          <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+            {history.map((h) => (
+              <div key={h.id} className="flex items-center justify-between text-sm border-b border-stone-100 last:border-0 pb-2 last:pb-0">
+                <div className="min-w-0">
+                  <p className="text-stone-700">{h.date}</p>
+                  {h.note && <p className="text-xs text-stone-400 truncate">{h.note}</p>}
+                </div>
+                <p className={`font-semibold shrink-0 ${h.type === "deposito" ? "text-emerald-700" : "text-rose-600"}`}>
+                  {h.type === "deposito" ? "+ " : "− "}{fmtBRL(h.value)}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState icon={ShieldCheck} text="Nenhuma movimentação registrada ainda. Use os botões acima para adicionar ou retirar dinheiro da reserva." />
+        )}
+      </Card>
     </div>
   );
 }
