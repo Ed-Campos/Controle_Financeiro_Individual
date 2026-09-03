@@ -873,11 +873,6 @@ function ReceitasScreen({ data, mk, mutate, session }) {
               {INCOME_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
             </select>
           </Field>
-          <Field label="Frequência">
-            <select className={inputCls} value={form.frequency} onChange={(e) => setForm({ ...form, frequency: e.target.value })}>
-              <option>Única</option><option>Mensal</option><option>Semanal</option>
-            </select>
-          </Field>
         </div>
         <button onClick={addIncome} className="mt-3 flex items-center gap-1.5 bg-teal-900 hover:bg-teal-800 text-white text-sm font-medium px-4 py-2 rounded-lg"><Plus size={16} />Adicionar receita</button>
       </Card>
@@ -890,7 +885,6 @@ function ReceitasScreen({ data, mk, mutate, session }) {
               <div key={i.id} className="flex items-center justify-between gap-3 text-sm border-b border-stone-100 pb-2 last:border-0">
                 <div className="min-w-0">
                   <p className="font-medium text-stone-700 truncate">{i.name} <span className="text-stone-400 font-normal">· {i.category}</span></p>
-                  <p className="text-xs text-stone-400 truncate">{i.frequency}</p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-stone-700 font-medium whitespace-nowrap">{fmtBRL(i.value)}</span>
