@@ -243,12 +243,20 @@ function DuoRings({ size = 40 }) {
   );
 }
 
-function Card({ children, className = "" }) {
+const Card = React.forwardRef(function Card({ children, className = "" }, ref) {
   return (
-    <div className={`bg-white rounded-2xl border border-stone-200 shadow-sm ${className}`}>
+    <div ref={ref} className={`bg-white rounded-2xl border border-stone-200 shadow-sm ${className}`}>
       {children}
     </div>
   );
+});
+
+// Dispara a função de envio ao pressionar Enter em um campo de texto do formulário.
+function handleEnterKey(e, submitFn) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    submitFn();
+  }
 }
 
 function ProgressBar({ pct, color = "#0f6b63" }) {
@@ -841,9 +849,14 @@ function ReceitasScreen({ data, mk, mutate, session }) {
   const emptyForm = { name: "", value: "", date: todayKey(), category: INCOME_CATEGORIES[0], frequency: "Mensal" };
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
+  const [search, setSearch] = useState("");
+  const formCardRef = useRef(null);
   const t = monthlyTotals(data, mk);
   const byCategory = {};
   t.incomes.forEach((i) => { byCategory[i.category] = (byCategory[i.category] || 0) + monthlyEquivalent(i); });
+  const filteredIncomes = search.trim()
+    ? t.incomes.filter((i) => i.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : t.incomes;
 
   function submitIncome() {
     if (!form.name.trim() || !form.value) return;
@@ -864,6 +877,7 @@ function ReceitasScreen({ data, mk, mutate, session }) {
   function startEditIncome(i) {
     setEditingId(i.id);
     setForm({ name: i.name, value: String(i.value), date: i.date, category: i.category, frequency: i.frequency || "Mensal" });
+    formCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   function cancelEditIncome() {
     setEditingId(null);
@@ -885,12 +899,12 @@ function ReceitasScreen({ data, mk, mutate, session }) {
         ))}
       </div>
 
-      <Card className="p-4">
+      <Card ref={formCardRef} className="p-4">
         <p className="text-sm font-semibold text-stone-700 mb-3">{editingId ? "Editar receita" : "Adicionar receita"}</p>
         <div className="grid md:grid-cols-3 gap-3">
-          <Field label="Nome"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Salário" /></Field>
-          <Field label="Valor (R$)"><input type="number" className={inputCls} value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} /></Field>
-          <Field label="Data"><input type="date" className={inputCls} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
+          <Field label="Nome"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} onKeyDown={(e) => handleEnterKey(e, submitIncome)} placeholder="Ex: Salário" /></Field>
+          <Field label="Valor (R$)"><input type="number" step="0.01" className={inputCls} value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} onKeyDown={(e) => handleEnterKey(e, submitIncome)} placeholder="0,00" /></Field>
+          <Field label="Data"><input type="date" className={inputCls} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} onKeyDown={(e) => handleEnterKey(e, submitIncome)} /></Field>
           <Field label="Categoria">
             <select className={inputCls} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
               {INCOME_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
@@ -908,10 +922,20 @@ function ReceitasScreen({ data, mk, mutate, session }) {
       </Card>
 
       <Card className="p-4">
-        <p className="text-sm font-semibold text-stone-700 mb-3">Receitas cadastradas</p>
-        {t.incomes.length === 0 ? <EmptyState icon={Wallet} text="Nenhuma receita cadastrada ainda." /> : (
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <p className="text-sm font-semibold text-stone-700">Receitas cadastradas</p>
+          <input
+            className={`${inputCls} w-auto`}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nome..."
+          />
+        </div>
+        {t.incomes.length === 0 ? <EmptyState icon={Wallet} text="Nenhuma receita cadastrada ainda." /> : filteredIncomes.length === 0 ? (
+          <EmptyState icon={Wallet} text="Nenhuma receita encontrada para essa busca." />
+        ) : (
           <div className="space-y-2">
-            {t.incomes.map((i) => (
+            {filteredIncomes.map((i) => (
               <div key={i.id} className="flex items-center justify-between gap-3 text-sm border-b border-stone-100 pb-2 last:border-0">
                 <div className="min-w-0">
                   <p className="font-medium text-stone-700 truncate">{i.name} <span className="text-stone-400 font-normal">· {i.category}</span></p>
@@ -931,13 +955,31 @@ function ReceitasScreen({ data, mk, mutate, session }) {
 }
 
 /* ============================== DESPESAS ============================== */
+// Atrasadas primeiro, depois pendentes, depois pagas; dentro de cada grupo, vencimento mais próximo primeiro.
+const EXPENSE_STATUS_ORDER = { Atrasado: 0, Pendente: 1, Pago: 2 };
+function sortExpensesByDueDate(list) {
+  return [...list].sort((a, b) => {
+    const statusDiff = EXPENSE_STATUS_ORDER[expenseStatus(a)] - EXPENSE_STATUS_ORDER[expenseStatus(b)];
+    if (statusDiff !== 0) return statusDiff;
+    return (a.dueDate || "").localeCompare(b.dueDate || "");
+  });
+}
+
 function DespesasScreen({ data, mk, mutate, session }) {
   const emptyForm = { name: "", category: EXPENSE_CATEGORIES[0], value: "", dueDate: todayKey(), paidDate: "", type: "Variável" };
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [filterCat, setFilterCat] = useState("Todas");
+  const [search, setSearch] = useState("");
+  const formCardRef = useRef(null);
   const t = monthlyTotals(data, mk);
-  const filtered = filterCat === "Todas" ? t.expenses : t.expenses.filter((e) => e.category === filterCat);
+  const byCategoryCount = {};
+  t.expenses.forEach((e) => { byCategoryCount[e.category] = (byCategoryCount[e.category] || 0) + 1; });
+  const catFiltered = filterCat === "Todas" ? t.expenses : t.expenses.filter((e) => e.category === filterCat);
+  const searched = search.trim()
+    ? catFiltered.filter((e) => e.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : catFiltered;
+  const filtered = sortExpensesByDueDate(searched);
   const totalPago = t.expenses.filter((e) => expenseStatus(e) === "Pago").reduce((s, e) => s + Number(e.value || 0), 0);
   const totalEmAberto = t.expenses.filter((e) => expenseStatus(e) !== "Pago").reduce((s, e) => s + Number(e.value || 0), 0);
 
@@ -960,6 +1002,7 @@ function DespesasScreen({ data, mk, mutate, session }) {
   function startEditExpense(e) {
     setEditingId(e.id);
     setForm({ name: e.name, category: e.category, value: String(e.value), dueDate: e.dueDate, paidDate: e.paidDate || "", type: e.type });
+    formCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   function cancelEditExpense() {
     setEditingId(null);
@@ -983,17 +1026,17 @@ function DespesasScreen({ data, mk, mutate, session }) {
         <StatCard label="Em aberto" value={fmtBRL(totalEmAberto)} tone="danger" />
       </div>
 
-      <Card className="p-4">
+      <Card ref={formCardRef} className="p-4">
         <p className="text-sm font-semibold text-stone-700 mb-3">{editingId ? "Editar despesa" : "Adicionar despesa"}</p>
         <div className="grid md:grid-cols-3 gap-3">
-          <Field label="Nome"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Mercado" /></Field>
-          <Field label="Valor (R$)"><input type="number" className={inputCls} value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} /></Field>
+          <Field label="Nome"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} onKeyDown={(e) => handleEnterKey(e, submitExpense)} placeholder="Ex: Mercado" /></Field>
+          <Field label="Valor (R$)"><input type="number" step="0.01" className={inputCls} value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} onKeyDown={(e) => handleEnterKey(e, submitExpense)} placeholder="0,00" /></Field>
           <Field label="Categoria">
             <select className={inputCls} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
               {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
             </select>
           </Field>
-          <Field label="Vencimento"><input type="date" className={inputCls} value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} /></Field>
+          <Field label="Vencimento"><input type="date" className={inputCls} value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} onKeyDown={(e) => handleEnterKey(e, submitExpense)} /></Field>
           <Field label="Tipo">
             <select className={inputCls} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
               <option>Fixa</option><option>Variável</option>
@@ -1013,11 +1056,20 @@ function DespesasScreen({ data, mk, mutate, session }) {
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <p className="text-sm font-semibold text-stone-700">Despesas de {labelForMonthKey(mk).toLowerCase()}</p>
-          <select className={`${inputCls} w-auto`} value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
-            <option>Todas</option>{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-          </select>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              className={`${inputCls} w-auto`}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por nome..."
+            />
+            <select className={`${inputCls} w-auto`} value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
+              <option value="Todas">Todas ({t.expenses.length})</option>
+              {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c} ({byCategoryCount[c] || 0})</option>)}
+            </select>
+          </div>
         </div>
-        {filtered.length === 0 ? <EmptyState icon={TrendingDown} text="Nenhuma despesa nesta categoria/mês." /> : (
+        {filtered.length === 0 ? <EmptyState icon={TrendingDown} text="Nenhuma despesa encontrada para esse filtro/busca." /> : (
           <div className="space-y-2">
             {filtered.map((e) => {
               const st = expenseStatus(e);
