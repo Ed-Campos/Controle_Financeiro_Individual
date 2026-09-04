@@ -69,6 +69,20 @@ function expenseStatus(e) {
   return "Pendente";
 }
 
+// Rótulo de exibição: destaca "Vence hoje" separado de "Pendente", sem alterar o status real usado em cálculos.
+function expenseDisplayLabel(e) {
+  const st = expenseStatus(e);
+  if (st === "Pendente" && e.dueDate === todayKey()) return "Vence hoje";
+  return st;
+}
+function expenseBadgeTone(e) {
+  const st = expenseStatus(e);
+  if (st === "Pago") return "success";
+  if (st === "Atrasado") return "danger";
+  if (st === "Pendente" && e.dueDate === todayKey()) return "urgent";
+  return "warning";
+}
+
 function daysUntil(dateStr) {
   if (!dateStr) return null;
   const ms = new Date(dateStr + "T00:00:00") - new Date(todayKey() + "T00:00:00");
@@ -289,6 +303,7 @@ function Badge({ children, tone = "neutral" }) {
     success: "bg-emerald-50 text-emerald-700",
     warning: "bg-amber-50 text-amber-700",
     danger: "bg-rose-50 text-rose-700",
+    urgent: "bg-orange-100 text-orange-700",
   };
   return <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${tones[tone]}`}>{children}</span>;
 }
@@ -302,15 +317,17 @@ function EmptyState({ icon: Icon, text }) {
   );
 }
 
-function Field({ label, children }) {
+function Field({ label, children, error }) {
   return (
     <label className="block">
       <span className="text-xs font-medium text-stone-500 mb-1 block">{label}</span>
       {children}
+      {error && <span className="text-xs text-rose-500 mt-1 block">{error}</span>}
     </label>
   );
 }
 const inputCls = "w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-teal-700/30 focus:border-teal-700";
+const inputErrorCls = "w-full rounded-lg border border-rose-400 px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-rose-300 focus:border-rose-400";
 
 /* ============================== NAV ============================== */
 const NAV_ITEMS = [
@@ -813,7 +830,7 @@ function DashboardScreen({ data, mk, setMk, session }) {
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-stone-700 whitespace-nowrap">{fmtBRL(e.value)}</p>
-                      <Badge tone={expenseStatus(e) === "Atrasado" ? "danger" : "warning"}>{expenseStatus(e)}</Badge>
+                      <Badge tone={expenseBadgeTone(e)}>{expenseDisplayLabel(e)}</Badge>
                     </div>
                   </div>
                 ))}
@@ -850,7 +867,9 @@ function ReceitasScreen({ data, mk, mutate, session }) {
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState("");
+  const [errors, setErrors] = useState({});
   const formCardRef = useRef(null);
+  const nameInputRef = useRef(null);
   const t = monthlyTotals(data, mk);
   const byCategory = {};
   t.incomes.forEach((i) => { byCategory[i.category] = (byCategory[i.category] || 0) + monthlyEquivalent(i); });
@@ -859,7 +878,11 @@ function ReceitasScreen({ data, mk, mutate, session }) {
     : t.incomes;
 
   function submitIncome() {
-    if (!form.name.trim() || !form.value) return;
+    const newErrors = {};
+    if (!form.name.trim()) newErrors.name = true;
+    if (!form.value) newErrors.value = true;
+    if (Object.keys(newErrors).length) { setErrors(newErrors); return; }
+    setErrors({});
     if (editingId) {
       mutate((d) => ({
         ...d,
@@ -873,6 +896,7 @@ function ReceitasScreen({ data, mk, mutate, session }) {
       mutate((d) => ({ ...d, incomes: [...(d.incomes || []), record] }));
     }
     setForm(emptyForm);
+    nameInputRef.current?.focus();
   }
   function startEditIncome(i) {
     setEditingId(i.id);
@@ -882,8 +906,10 @@ function ReceitasScreen({ data, mk, mutate, session }) {
   function cancelEditIncome() {
     setEditingId(null);
     setForm(emptyForm);
+    setErrors({});
   }
-  function removeIncome(id) {
+  function removeIncome(id, name) {
+    if (!window.confirm(`Excluir a receita "${name}"?`)) return;
     mutate((d) => ({ ...d, incomes: d.incomes.filter((i) => i.id !== id) }));
     if (editingId === id) cancelEditIncome();
   }
@@ -902,8 +928,27 @@ function ReceitasScreen({ data, mk, mutate, session }) {
       <Card ref={formCardRef} className="p-4">
         <p className="text-sm font-semibold text-stone-700 mb-3">{editingId ? "Editar receita" : "Adicionar receita"}</p>
         <div className="grid md:grid-cols-3 gap-3">
-          <Field label="Nome"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} onKeyDown={(e) => handleEnterKey(e, submitIncome)} placeholder="Ex: Salário" /></Field>
-          <Field label="Valor (R$)"><input type="number" step="0.01" className={inputCls} value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} onKeyDown={(e) => handleEnterKey(e, submitIncome)} placeholder="0,00" /></Field>
+          <Field label="Nome" error={errors.name ? "Campo obrigatório" : null}>
+            <input
+              ref={nameInputRef}
+              className={errors.name ? inputErrorCls : inputCls}
+              value={form.name}
+              onChange={(e) => { setForm({ ...form, name: e.target.value }); if (errors.name) setErrors({ ...errors, name: false }); }}
+              onKeyDown={(e) => handleEnterKey(e, submitIncome)}
+              placeholder="Ex: Salário"
+            />
+          </Field>
+          <Field label="Valor (R$)" error={errors.value ? "Campo obrigatório" : null}>
+            <input
+              type="number"
+              step="0.01"
+              className={errors.value ? inputErrorCls : inputCls}
+              value={form.value}
+              onChange={(e) => { setForm({ ...form, value: e.target.value }); if (errors.value) setErrors({ ...errors, value: false }); }}
+              onKeyDown={(e) => handleEnterKey(e, submitIncome)}
+              placeholder="0,00"
+            />
+          </Field>
           <Field label="Data"><input type="date" className={inputCls} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} onKeyDown={(e) => handleEnterKey(e, submitIncome)} /></Field>
           <Field label="Categoria">
             <select className={inputCls} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
@@ -943,7 +988,7 @@ function ReceitasScreen({ data, mk, mutate, session }) {
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-stone-700 font-medium whitespace-nowrap">{fmtBRL(i.value)}</span>
                   <button onClick={() => startEditIncome(i)} className="text-stone-300 hover:text-teal-700"><Pencil size={15} /></button>
-                  <button onClick={() => removeIncome(i.id)} className="text-stone-300 hover:text-rose-500"><Trash2 size={15} /></button>
+                  <button onClick={() => removeIncome(i.id, i.name)} className="text-stone-300 hover:text-rose-500"><Trash2 size={15} /></button>
                 </div>
               </div>
             ))}
@@ -971,7 +1016,9 @@ function DespesasScreen({ data, mk, mutate, session }) {
   const [editingId, setEditingId] = useState(null);
   const [filterCat, setFilterCat] = useState("Todas");
   const [search, setSearch] = useState("");
+  const [errors, setErrors] = useState({});
   const formCardRef = useRef(null);
+  const nameInputRef = useRef(null);
   const t = monthlyTotals(data, mk);
   const byCategoryCount = {};
   t.expenses.forEach((e) => { byCategoryCount[e.category] = (byCategoryCount[e.category] || 0) + 1; });
@@ -984,7 +1031,11 @@ function DespesasScreen({ data, mk, mutate, session }) {
   const totalEmAberto = t.expenses.filter((e) => expenseStatus(e) !== "Pago").reduce((s, e) => s + Number(e.value || 0), 0);
 
   function submitExpense() {
-    if (!form.name.trim() || !form.value) return;
+    const newErrors = {};
+    if (!form.name.trim()) newErrors.name = true;
+    if (!form.value) newErrors.value = true;
+    if (Object.keys(newErrors).length) { setErrors(newErrors); return; }
+    setErrors({});
     if (editingId) {
       mutate((d) => ({
         ...d,
@@ -998,6 +1049,7 @@ function DespesasScreen({ data, mk, mutate, session }) {
       mutate((d) => ({ ...d, expenses: [...(d.expenses || []), record] }));
     }
     setForm(emptyForm);
+    nameInputRef.current?.focus();
   }
   function startEditExpense(e) {
     setEditingId(e.id);
@@ -1007,11 +1059,13 @@ function DespesasScreen({ data, mk, mutate, session }) {
   function cancelEditExpense() {
     setEditingId(null);
     setForm(emptyForm);
+    setErrors({});
   }
   function togglePaid(e) {
     mutate((d) => ({ ...d, expenses: d.expenses.map((x) => x.id === e.id ? { ...x, paidDate: x.paidDate ? "" : todayKey(), updatedAt: new Date().toISOString() } : x) }));
   }
-  function removeExpense(id) {
+  function removeExpense(id, name) {
+    if (!window.confirm(`Excluir a despesa "${name}"?`)) return;
     mutate((d) => ({ ...d, expenses: d.expenses.filter((e) => e.id !== id) }));
     if (editingId === id) cancelEditExpense();
   }
@@ -1029,8 +1083,27 @@ function DespesasScreen({ data, mk, mutate, session }) {
       <Card ref={formCardRef} className="p-4">
         <p className="text-sm font-semibold text-stone-700 mb-3">{editingId ? "Editar despesa" : "Adicionar despesa"}</p>
         <div className="grid md:grid-cols-3 gap-3">
-          <Field label="Nome"><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} onKeyDown={(e) => handleEnterKey(e, submitExpense)} placeholder="Ex: Mercado" /></Field>
-          <Field label="Valor (R$)"><input type="number" step="0.01" className={inputCls} value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} onKeyDown={(e) => handleEnterKey(e, submitExpense)} placeholder="0,00" /></Field>
+          <Field label="Nome" error={errors.name ? "Campo obrigatório" : null}>
+            <input
+              ref={nameInputRef}
+              className={errors.name ? inputErrorCls : inputCls}
+              value={form.name}
+              onChange={(e) => { setForm({ ...form, name: e.target.value }); if (errors.name) setErrors({ ...errors, name: false }); }}
+              onKeyDown={(e) => handleEnterKey(e, submitExpense)}
+              placeholder="Ex: Mercado"
+            />
+          </Field>
+          <Field label="Valor (R$)" error={errors.value ? "Campo obrigatório" : null}>
+            <input
+              type="number"
+              step="0.01"
+              className={errors.value ? inputErrorCls : inputCls}
+              value={form.value}
+              onChange={(e) => { setForm({ ...form, value: e.target.value }); if (errors.value) setErrors({ ...errors, value: false }); }}
+              onKeyDown={(e) => handleEnterKey(e, submitExpense)}
+              placeholder="0,00"
+            />
+          </Field>
           <Field label="Categoria">
             <select className={inputCls} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
               {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
@@ -1072,7 +1145,6 @@ function DespesasScreen({ data, mk, mutate, session }) {
         {filtered.length === 0 ? <EmptyState icon={TrendingDown} text="Nenhuma despesa encontrada para esse filtro/busca." /> : (
           <div className="space-y-2">
             {filtered.map((e) => {
-              const st = expenseStatus(e);
               return (
                 <div key={e.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 text-sm border-b border-stone-100 pb-2 last:border-0">
                   <div className="flex items-center gap-2 min-w-0">
@@ -1084,9 +1156,9 @@ function DespesasScreen({ data, mk, mutate, session }) {
                   </div>
                   <div className="flex items-center gap-3 shrink-0 ml-auto">
                     <span className="text-stone-700 font-medium whitespace-nowrap">{fmtBRL(e.value)}</span>
-                    <button onClick={() => togglePaid(e)}><Badge tone={st === "Pago" ? "success" : st === "Atrasado" ? "danger" : "warning"}>{st}</Badge></button>
+                    <button onClick={() => togglePaid(e)}><Badge tone={expenseBadgeTone(e)}>{expenseDisplayLabel(e)}</Badge></button>
                     <button onClick={() => startEditExpense(e)} className="text-stone-300 hover:text-teal-700"><Pencil size={15} /></button>
-                    <button onClick={() => removeExpense(e.id)} className="text-stone-300 hover:text-rose-500"><Trash2 size={15} /></button>
+                    <button onClick={() => removeExpense(e.id, e.name)} className="text-stone-300 hover:text-rose-500"><Trash2 size={15} /></button>
                   </div>
                 </div>
               );
@@ -1112,7 +1184,10 @@ function MetasScreen({ data, mk, mutate, session }) {
   function updateSaved(id, delta) {
     mutate((d) => ({ ...d, goals: d.goals.map((g) => g.id === id ? { ...g, savedValue: Math.max(0, (g.savedValue || 0) + delta) } : g) }));
   }
-  function removeGoal(id) { mutate((d) => ({ ...d, goals: d.goals.filter((g) => g.id !== id) })); }
+  function removeGoal(id, name) {
+    if (!window.confirm(`Excluir o objetivo "${name}"?`)) return;
+    mutate((d) => ({ ...d, goals: d.goals.filter((g) => g.id !== id) }));
+  }
 
   return (
     <div className="space-y-5">
@@ -1155,7 +1230,7 @@ function MetasScreen({ data, mk, mutate, session }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-semibold text-stone-800 truncate">{g.name}</p>
-                    <button onClick={() => removeGoal(g.id)} className="text-stone-300 hover:text-rose-500 shrink-0"><Trash2 size={15} /></button>
+                    <button onClick={() => removeGoal(g.id, g.name)} className="text-stone-300 hover:text-rose-500 shrink-0"><Trash2 size={15} /></button>
                   </div>
                   <p className="text-xs text-stone-400 mb-1">{fmtBRL(g.savedValue || 0)} de {fmtBRL(g.targetValue)} · até {g.targetDate}</p>
                   <p className="text-xs text-stone-500 mb-2">Necessário: <b>{fmtBRL(necessario)}/mês</b> · {meses} {meses === 1 ? "mês restante" : "meses restantes"}</p>
